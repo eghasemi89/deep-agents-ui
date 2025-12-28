@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { getConfig, saveConfig, StandaloneConfig } from "@/lib/config";
 import { ConfigDialog } from "@/app/components/ConfigDialog";
+import { LoginDialog } from "@/app/components/LoginDialog";
 import { Button } from "@/components/ui/button";
 import { Assistant } from "@langchain/langgraph-sdk";
 import { ClientProvider, useClient } from "@/providers/ClientProvider";
-import { Settings, MessagesSquare, SquarePen } from "lucide-react";
+import { Settings, MessagesSquare, SquarePen, LogOut } from "lucide-react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -147,6 +149,20 @@ function HomePageInner({
             <Button
               variant="outline"
               size="sm"
+              onClick={() => {
+                const newConfig = { ...config, authToken: undefined };
+                handleSaveConfig(newConfig);
+                // Reload to show login dialog
+                window.location.reload();
+              }}
+              title="Logout"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setThreadId(null)}
               disabled={!threadId}
               className="border-[#2F6868] bg-[#2F6868] text-white hover:bg-[#2F6868]/80"
@@ -204,6 +220,7 @@ function HomePageInner({
 }
 
 function HomePageContent() {
+  const router = useRouter();
   const [config, setConfig] = useState<StandaloneConfig | null>(null);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [assistantId, setAssistantId] = useQueryState("assistantId");
@@ -216,6 +233,15 @@ function HomePageContent() {
       if (!assistantId) {
         setAssistantId(savedConfig.assistantId);
       }
+      // Check if auth token is missing (or if using Supabase, check if token is missing)
+      const needsAuth = savedConfig.supabaseUrl && savedConfig.supabaseAnonKey
+        ? !savedConfig.authToken // Using Supabase, need token
+        : !savedConfig.authToken; // Using legacy auth, need token
+      if (needsAuth && savedConfig.supabaseUrl && savedConfig.supabaseAnonKey) {
+        // Redirect to auth page if using Supabase
+        router.push("/auth");
+        return;
+      }
     } else {
       setConfigDialogOpen(true);
     }
@@ -227,12 +253,21 @@ function HomePageContent() {
     if (config && !assistantId) {
       setAssistantId(config.assistantId);
     }
+    // Check if auth token is missing after config is loaded
+    const needsAuth = config?.supabaseUrl && config?.supabaseAnonKey
+      ? !config.authToken // Using Supabase, need token
+      : !config?.authToken; // Using legacy auth, need token
+    if (config && needsAuth && config.supabaseUrl && config.supabaseAnonKey) {
+      // Redirect to auth page if using Supabase
+      router.push("/auth");
+    }
   }, [config, assistantId, setAssistantId]);
 
   const handleSaveConfig = useCallback((newConfig: StandaloneConfig) => {
     saveConfig(newConfig);
     setConfig(newConfig);
   }, []);
+
 
   const langsmithApiKey =
     config?.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
@@ -263,10 +298,23 @@ function HomePageContent() {
     );
   }
 
+  // Always redirect to /auth if no token (let auth page handle Supabase vs legacy)
+  if (!config.authToken) {
+    router.push("/auth");
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Redirecting to authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ClientProvider
       deploymentUrl={config.deploymentUrl}
       apiKey={langsmithApiKey}
+      authToken={config.authToken}
     >
       <HomePageInner
         config={config}

@@ -50,6 +50,7 @@ export function useChat({
     onError: onHistoryRevalidate,
     onCreated: onHistoryRevalidate,
     experimental_thread: thread,
+    // Note: Authorization header is handled by the Client's defaultHeaders
   });
 
   const sendMessage = useCallback(

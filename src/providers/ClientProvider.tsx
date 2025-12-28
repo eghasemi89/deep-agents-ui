@@ -13,22 +13,35 @@ interface ClientProviderProps {
   children: ReactNode;
   deploymentUrl: string;
   apiKey: string;
+  authToken?: string;
 }
 
 export function ClientProvider({
   children,
   deploymentUrl,
   apiKey,
+  authToken,
 }: ClientProviderProps) {
   const client = useMemo(() => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Add Authorization header if authToken is provided
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+
+    // Add X-Api-Key if provided (for LangSmith compatibility)
+    if (apiKey) {
+      headers["X-Api-Key"] = apiKey;
+    }
+
     return new Client({
       apiUrl: deploymentUrl,
-      defaultHeaders: {
-        "Content-Type": "application/json",
-        "X-Api-Key": apiKey,
-      },
+      defaultHeaders: headers,
     });
-  }, [deploymentUrl, apiKey]);
+  }, [deploymentUrl, apiKey, authToken]);
 
   const value = useMemo(() => ({ client }), [client]);
 

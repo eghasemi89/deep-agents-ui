@@ -44,6 +44,7 @@ export function useThreads(props: {
         deploymentUrl: config.deploymentUrl,
         assistantId: config.assistantId,
         apiKey,
+        authToken: config.authToken,
         status: props?.status,
       };
     },
@@ -51,6 +52,7 @@ export function useThreads(props: {
       deploymentUrl,
       assistantId,
       apiKey,
+      authToken,
       status,
       pageIndex,
       pageSize,
@@ -61,11 +63,20 @@ export function useThreads(props: {
       deploymentUrl: string;
       assistantId: string;
       apiKey: string;
+      authToken?: string;
       status?: Thread["status"];
     }) => {
+      const headers: Record<string, string> = {};
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+      if (apiKey) {
+        headers["X-Api-Key"] = apiKey;
+      }
+
       const client = new Client({
         apiUrl: deploymentUrl,
-        defaultHeaders: apiKey ? { "X-Api-Key": apiKey } : {},
+        defaultHeaders: headers,
       });
 
       // Check if assistantId is a UUID (deployed) or graph name (local)

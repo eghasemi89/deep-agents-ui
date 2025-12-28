@@ -36,12 +36,24 @@ export function ConfigDialog({
   const [langsmithApiKey, setLangsmithApiKey] = useState(
     initialConfig?.langsmithApiKey || ""
   );
+  const [authToken, setAuthToken] = useState(
+    initialConfig?.authToken || ""
+  );
+  const [supabaseUrl, setSupabaseUrl] = useState(
+    initialConfig?.supabaseUrl || ""
+  );
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(
+    initialConfig?.supabaseAnonKey || ""
+  );
 
   useEffect(() => {
     if (open && initialConfig) {
       setDeploymentUrl(initialConfig.deploymentUrl);
       setAssistantId(initialConfig.assistantId);
       setLangsmithApiKey(initialConfig.langsmithApiKey || "");
+      setAuthToken(initialConfig.authToken || "");
+      setSupabaseUrl(initialConfig.supabaseUrl || "");
+      setSupabaseAnonKey(initialConfig.supabaseAnonKey || "");
     }
   }, [open, initialConfig]);
 
@@ -55,6 +67,9 @@ export function ConfigDialog({
       deploymentUrl,
       assistantId,
       langsmithApiKey: langsmithApiKey || undefined,
+      authToken: authToken || undefined,
+      supabaseUrl: supabaseUrl || undefined,
+      supabaseAnonKey: supabaseAnonKey || undefined,
     });
     onOpenChange(false);
   };
@@ -103,6 +118,54 @@ export function ConfigDialog({
               value={langsmithApiKey}
               onChange={(e) => setLangsmithApiKey(e.target.value)}
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="supabaseUrl">
+              Supabase URL{" "}
+              <span className="text-muted-foreground">(Optional - for OAuth)</span>
+            </Label>
+            <Input
+              id="supabaseUrl"
+              type="url"
+              placeholder="https://xxxxx.supabase.co"
+              value={supabaseUrl}
+              onChange={(e) => setSupabaseUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Your Supabase project URL
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="supabaseAnonKey">
+              Supabase Anon Key{" "}
+              <span className="text-muted-foreground">(Optional - for OAuth)</span>
+            </Label>
+            <Input
+              id="supabaseAnonKey"
+              type="password"
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              value={supabaseAnonKey}
+              onChange={(e) => setSupabaseAnonKey(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Your Supabase anon/public key (safe for client-side use)
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="authToken">
+              Authentication Token{" "}
+              <span className="text-muted-foreground">(Legacy - use Supabase OAuth instead)</span>
+            </Label>
+            <Input
+              id="authToken"
+              type="password"
+              placeholder="user1-token"
+              value={authToken}
+              onChange={(e) => setAuthToken(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Legacy bearer token (only used if Supabase is not configured)
+            </p>
           </div>
         </div>
         <DialogFooter>
