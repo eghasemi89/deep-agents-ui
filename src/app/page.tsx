@@ -9,7 +9,7 @@ import { LoginDialog } from "@/app/components/LoginDialog";
 import { Button } from "@/components/ui/button";
 import { Assistant } from "@langchain/langgraph-sdk";
 import { ClientProvider, useClient } from "@/providers/ClientProvider";
-import { Settings, MessagesSquare, SquarePen, LogOut } from "lucide-react";
+import { Settings, MessagesSquare, SquarePen, LogOut, Sparkles } from "lucide-react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -39,23 +39,27 @@ function HomePageInner({
   const [mutateThreads, setMutateThreads] = useState<(() => void) | null>(null);
   const [interruptCount, setInterruptCount] = useState(0);
   const [assistant, setAssistant] = useState<Assistant | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(
+    config.assistantId || "research"
+  );
 
-  const fetchAssistant = useCallback(async () => {
+  const fetchAssistant = useCallback(async (assistantId?: string) => {
+    const targetId = assistantId || selectedAgentId || config.assistantId;
     const isUUID =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        config.assistantId
+        targetId
       );
 
     if (isUUID) {
       // We should try to fetch the assistant directly with this UUID
       try {
-        const data = await client.assistants.get(config.assistantId);
+        const data = await client.assistants.get(targetId);
         setAssistant(data);
       } catch (error) {
         console.error("Failed to fetch assistant:", error);
         setAssistant({
-          assistant_id: config.assistantId,
-          graph_id: config.assistantId,
+          assistant_id: targetId,
+          graph_id: targetId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           config: {},
@@ -70,7 +74,7 @@ function HomePageInner({
         // We should try to list out the assistants for this graph, and then use the default one.
         // TODO: Paginate this search, but 100 should be enough for graph name
         const assistants = await client.assistants.search({
-          graphId: config.assistantId,
+          graphId: targetId,
           limit: 100,
         });
         const defaultAssistant = assistants.find(
@@ -80,29 +84,60 @@ function HomePageInner({
           throw new Error("No default assistant found");
         }
         setAssistant(defaultAssistant);
-      } catch (error) {
-        console.error(
-          "Failed to find default assistant from graph_id: try setting the assistant_id directly:",
-          error
-        );
-        setAssistant({
-          assistant_id: config.assistantId,
-          graph_id: config.assistantId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          config: {},
-          metadata: {},
-          version: 1,
-          name: config.assistantId,
-          context: {},
-        });
+      } catch (error: any) {
+        // Check if it's a 404 error (graph not found)
+        if (error?.status === 404 || error?.response?.status === 404) {
+          console.warn(
+            `Graph '${targetId}' not found on the backend. Make sure your langgraph.json includes this graph and the server has been restarted.`
+          );
+          // Fall back to a placeholder assistant
+          setAssistant({
+            assistant_id: targetId,
+            graph_id: targetId,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            config: {},
+            metadata: {},
+            version: 1,
+            name: targetId,
+            context: {},
+          });
+        } else {
+          console.error(
+            "Failed to find default assistant from graph_id:",
+            error
+          );
+          setAssistant({
+            assistant_id: targetId,
+            graph_id: targetId,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            config: {},
+            metadata: {},
+            version: 1,
+            name: targetId,
+            context: {},
+          });
+        }
       }
     }
-  }, [client, config.assistantId]);
+  }, [client, config.assistantId, selectedAgentId]);
 
   useEffect(() => {
     fetchAssistant();
   }, [fetchAssistant]);
+
+  const handleAssistantChange = useCallback(
+    async (newAssistantId: string) => {
+      // Update immediately for instant UI feedback
+      setSelectedAgentId(newAssistantId);
+      // Clear thread when switching assistants (async but don't wait)
+      setThreadId(null);
+      // Fetch the new assistant in the background
+      fetchAssistant(newAssistantId);
+    },
+    [fetchAssistant, setThreadId]
+  );
 
   return (
     <>
@@ -209,7 +244,15 @@ function HomePageInner({
                 activeAssistant={assistant}
                 onHistoryRevalidate={() => mutateThreads?.()}
               >
-                <ChatInterface assistant={assistant} />
+                <ChatInterface 
+                  assistant={assistant}
+                  selectedAgentId={selectedAgentId}
+                  onAssistantChange={handleAssistantChange}
+                  availableAgents={[
+                    { id: "research", name: "Research", icon: <Sparkles size={14} /> },
+                    { id: "chat", name: "Chat", icon: <MessagesSquare size={14} /> },
+                  ]}
+                />
               </ChatProvider>
             </ResizablePanel>
           </ResizablePanelGroup>
