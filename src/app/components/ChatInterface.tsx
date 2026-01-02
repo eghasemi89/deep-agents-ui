@@ -564,8 +564,14 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
                     onValueChange={(value) => {
                       onAssistantChange?.(value);
                     }}
+                    disabled={messages.length > 0}
                   >
-                    <SelectTrigger className="h-7 w-[130px] border-border bg-background text-xs">
+                    <SelectTrigger 
+                      className={cn(
+                        "h-7 w-[130px] border-border bg-background text-xs",
+                        messages.length > 0 && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
                       <div className="flex items-center gap-1.5">
                         {(() => {
                           const currentAgentId = selectedAgentId || assistant?.graph_id || assistant?.assistant_id;

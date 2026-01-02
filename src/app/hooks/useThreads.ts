@@ -129,13 +129,16 @@ export function useThreads(props: {
           title = `Thread ${thread.thread_id.slice(0, 8)}`;
         }
 
+        // Extract the actual assistant_id from thread metadata or thread object
+        const threadAssistantId = thread.metadata?.assistant_id || thread.assistant_id || assistantId;
+
         return {
           id: thread.thread_id,
           updatedAt: new Date(thread.updated_at),
           status: thread.status,
           title,
           description,
-          assistantId,
+          assistantId: threadAssistantId,
         };
       });
     },

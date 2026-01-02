@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { getConfig, saveConfig, StandaloneConfig } from "@/lib/config";
@@ -127,6 +127,59 @@ function HomePageInner({
     fetchAssistant();
   }, [fetchAssistant]);
 
+  // When a thread is loaded, fetch the thread to get its assistant and update selectedAgentId
+  // This is a fallback in case the assistantId wasn't available from the thread list
+  useEffect(() => {
+    if (!threadId || !client) return;
+
+    const loadThreadAssistant = async () => {
+      try {
+        const thread = await client.threads.get(threadId);
+        // Get assistant_id from thread metadata or use the assistant_id directly
+        const threadAssistantId = thread.metadata?.assistant_id || thread.assistant_id;
+        
+        if (threadAssistantId) {
+          // Check if it's a graph name (research or chat) or a UUID
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadAssistantId);
+          
+          if (!isUUID) {
+            // It's a graph name, use it directly
+            if (threadAssistantId === "research" || threadAssistantId === "chat") {
+              // Only update if not already set (to avoid overriding immediate update from thread selection)
+              setSelectedAgentId((current) => {
+                if (current !== threadAssistantId) {
+                  fetchAssistant(threadAssistantId);
+                  return threadAssistantId;
+                }
+                return current;
+              });
+            }
+          } else {
+            // It's a UUID, fetch the assistant to get its graph_id
+            try {
+              const threadAssistant = await client.assistants.get(threadAssistantId);
+              if (threadAssistant.graph_id === "research" || threadAssistant.graph_id === "chat") {
+                setSelectedAgentId((current) => {
+                  if (current !== threadAssistant.graph_id) {
+                    setAssistant(threadAssistant);
+                    return threadAssistant.graph_id;
+                  }
+                  return current;
+                });
+              }
+            } catch (error) {
+              console.error("Failed to fetch thread assistant:", error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load thread:", error);
+      }
+    };
+
+    loadThreadAssistant();
+  }, [threadId, client, fetchAssistant]);
+
   const handleAssistantChange = useCallback(
     async (newAssistantId: string) => {
       // Update immediately for instant UI feedback
@@ -138,6 +191,17 @@ function HomePageInner({
     },
     [fetchAssistant, setThreadId]
   );
+
+  // Get the current agent name based on selectedAgentId
+  const availableAgents = [
+    { id: "research", name: "Research" },
+    { id: "chat", name: "Chat" },
+  ];
+  const currentAgentName = useMemo(() => {
+    const currentAgentId = selectedAgentId || assistant?.graph_id || assistant?.assistant_id || config.assistantId || "research";
+    const agent = availableAgents.find((a) => a.id === currentAgentId);
+    return agent?.name || currentAgentId;
+  }, [selectedAgentId, assistant?.graph_id, assistant?.assistant_id, config.assistantId]);
 
   return (
     <>
@@ -171,7 +235,7 @@ function HomePageInner({
           <div className="flex items-center gap-2">
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Assistant:</span>{" "}
-              {config.assistantId}
+              {currentAgentName}
             </div>
             <Button
               variant="outline"
@@ -223,7 +287,27 @@ function HomePageInner({
                   className="relative min-w-[380px]"
                 >
                   <ThreadList
-                    onThreadSelect={async (id) => {
+                    onThreadSelect={async (id, assistantId) => {
+                      // Immediately update selectedAgentId if we have assistant info
+                      if (assistantId) {
+                        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assistantId);
+                        if (!isUUID && (assistantId === "research" || assistantId === "chat")) {
+                          // It's a graph name, update immediately
+                          setSelectedAgentId(assistantId);
+                          fetchAssistant(assistantId);
+                        } else if (isUUID && client) {
+                          // It's a UUID, fetch the assistant to get graph_id
+                          try {
+                            const threadAssistant = await client.assistants.get(assistantId);
+                            if (threadAssistant.graph_id === "research" || threadAssistant.graph_id === "chat") {
+                              setSelectedAgentId(threadAssistant.graph_id);
+                              setAssistant(threadAssistant);
+                            }
+                          } catch (error) {
+                            console.error("Failed to fetch assistant for thread:", error);
+                          }
+                        }
+                      }
                       await setThreadId(id);
                     }}
                     onMutateReady={(fn) => setMutateThreads(() => fn)}

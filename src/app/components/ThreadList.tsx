@@ -111,7 +111,7 @@ function EmptyState() {
 }
 
 interface ThreadListProps {
-  onThreadSelect: (id: string) => void;
+  onThreadSelect: (id: string, assistantId?: string) => void;
   onMutateReady?: (mutate: () => void) => void;
   onClose?: () => void;
   onInterruptCountChange?: (count: number) => void;
@@ -300,7 +300,7 @@ export function ThreadList({
                       <button
                         key={thread.id}
                         type="button"
-                        onClick={() => onThreadSelect(thread.id)}
+                        onClick={() => onThreadSelect(thread.id, thread.assistantId)}
                         className={cn(
                           "grid w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200",
                           "hover:bg-accent",
