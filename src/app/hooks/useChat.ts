@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   type Message,
@@ -12,6 +12,7 @@ import type { UseStreamThread } from "@langchain/langgraph-sdk/react";
 import type { TodoItem } from "@/app/types/types";
 import { useClient } from "@/providers/ClientProvider";
 import { useQueryState } from "nuqs";
+import { getConfig } from "@/lib/config";
 
 export type StateType = {
   messages: Message[];
@@ -42,7 +43,14 @@ export function useChat({
     client: client ?? undefined,
     reconnectOnMount: true,
     threadId: threadId ?? null,
-    onThreadId: setThreadId,
+    onThreadId: (newThreadId) => {
+      setThreadId(newThreadId);
+      // Path B: If we have pending images to patch, do it now that threadId is available
+      if (newThreadId && pendingImagesForThread.current.length > 0) {
+        patchThreadWithImages(newThreadId, pendingImagesForThread.current);
+        pendingImagesForThread.current = [];
+      }
+    },
     defaultHeaders: { "x-auth-scheme": "langsmith" },
     fetchStateHistory: true,
     // Revalidate thread list when stream finishes, errors, or creates new thread
@@ -52,6 +60,104 @@ export function useChat({
     experimental_thread: thread,
     // Note: Authorization header is handled by the Client's defaultHeaders
   });
+
+  // Track images that need to be patched when threadId becomes available (Path B)
+  const pendingImagesForThread = useRef<Array<{ doc_id: string; storage_path: string }>>([]);
+
+  // Function to patch thread metadata with images
+  const patchThreadWithImages = useCallback(
+    async (targetThreadId: string, images: Array<{ doc_id: string; storage_path: string }>) => {
+      if (!client || images.length === 0) return;
+
+      try {
+        const config = getConfig();
+        if (!config?.deploymentUrl) {
+          console.error("Cannot patch thread: deploymentUrl not found in config");
+          return;
+        }
+
+        // Get current thread to merge metadata
+        const currentThread = await client.threads.get(targetThreadId);
+        const currentMetadata = currentThread.metadata || {};
+        const existingImages = Array.isArray(currentMetadata.images) ? currentMetadata.images : [];
+
+        // Merge new images with existing ones (avoid duplicates by doc_id)
+        const imageMap = new Map<string, { doc_id: string; storage_path: string }>();
+        
+        // Add existing images
+        existingImages.forEach((img: { doc_id: string; storage_path: string }) => {
+          if (img.doc_id) {
+            imageMap.set(img.doc_id, img);
+          }
+        });
+        
+        // Add new images
+        images.forEach((img) => {
+          imageMap.set(img.doc_id, img);
+        });
+
+        // Create merged images array
+        const mergedImages = Array.from(imageMap.values());
+
+        // Patch thread metadata
+        const baseUrl = config.deploymentUrl.replace(/\/+$/, "");
+        const url = `${baseUrl}/threads/${targetThreadId}`;
+        
+        console.debug("Patching thread with images:", { url, threadId: targetThreadId, imageCount: mergedImages.length });
+        
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        
+        if (config.authToken) {
+          headers["Authorization"] = `Bearer ${config.authToken}`;
+        }
+        
+        const apiKey = config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
+        if (apiKey) {
+          headers["X-Api-Key"] = apiKey;
+        }
+        
+        headers["x-auth-scheme"] = "langsmith";
+
+        const response = await fetch(url, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            metadata: {
+              ...currentMetadata,
+              images: mergedImages,
+            },
+          }),
+        }).catch((fetchError) => {
+          // Handle network/CORS errors
+          console.error("Network error patching thread with images:", fetchError);
+          throw fetchError;
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "Unable to read error response");
+          console.error(
+            "Failed to patch thread with images:",
+            response.status,
+            response.statusText,
+            errorText.substring(0, 200)
+          );
+        } else {
+          console.debug("Successfully patched thread with images");
+        }
+      } catch (error) {
+        // Log the error but don't throw - this is a best-effort operation
+        if (error instanceof Error) {
+          console.error("Error patching thread with images:", error.message, error.name);
+        } else {
+          console.error("Error patching thread with images:", error);
+        }
+        // Don't throw - this is a best-effort operation
+      }
+    },
+    [client]
+  );
 
   const sendMessage = useCallback(
     (content: string, uploadedImages: Array<{ doc_id: string; storage_url: string; storage_path: string }> = []) => {
@@ -103,10 +209,29 @@ export function useChat({
           config: { ...(activeAssistant?.config ?? {}), recursion_limit: 100 },
         }
       );
+      
+      // Path A & B: If we have images, patch thread metadata
+      if (uploadedImages.length > 0) {
+        const imageRefs = uploadedImages.map((image) => ({
+          doc_id: image.doc_id,
+          storage_path: image.storage_path,
+        }));
+
+        if (threadId) {
+          // Path A: Thread exists, patch after a small delay to ensure thread is ready
+          setTimeout(() => {
+            patchThreadWithImages(threadId, imageRefs);
+          }, 100);
+        } else {
+          // Path B: Thread doesn't exist yet, store images to patch when threadId is available
+          pendingImagesForThread.current = imageRefs;
+        }
+      }
+      
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate]
+    [stream, activeAssistant?.config, onHistoryRevalidate, threadId, patchThreadWithImages]
   );
 
   const runSingleStep = useCallback(
