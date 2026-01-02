@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import React from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   type Message,
@@ -38,21 +37,12 @@ export function useChat({
   const [threadId, setThreadId] = useQueryState("threadId");
   const client = useClient();
 
-  const handleThreadId = useCallback(
-    (newThreadId: string | null) => {
-      setThreadId(newThreadId);
-      // Note: organization_id is now set by the backend auth handler
-      // No need to patch it from the frontend for security
-    },
-    [setThreadId]
-  );
-
   const stream = useStream<StateType>({
     assistantId: activeAssistant?.assistant_id || "",
     client: client ?? undefined,
     reconnectOnMount: true,
     threadId: threadId ?? null,
-    onThreadId: handleThreadId,
+    onThreadId: setThreadId,
     defaultHeaders: { "x-auth-scheme": "langsmith" },
     fetchStateHistory: true,
     // Revalidate thread list when stream finishes, errors, or creates new thread
@@ -64,19 +54,35 @@ export function useChat({
   });
 
   const sendMessage = useCallback(
-    (content: string) => {
-      const assistantId = activeAssistant?.assistant_id || "";
-      const graphId = activeAssistant?.graph_id || assistantId;
+    (content: string, imageUrls: string[] = []) => {
+      // Build message content with text and/or images
+      let messageContent: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
       
-      const newMessage: Message = {
-        id: uuidv4(),
-        type: "human",
-        content,
-        additional_kwargs: {
-          assistant_id: assistantId,
-          graph_id: graphId,
-        },
+      if (imageUrls.length > 0) {
+        // Multimodal message with text and images
+        const contentParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
+        
+        if (content.trim()) {
+          contentParts.push({ type: "text" as const, text: content });
+        }
+        
+        // Add each image URL
+        imageUrls.forEach((url) => {
+          contentParts.push({ type: "image_url" as const, image_url: { url } });
+        });
+        
+        messageContent = contentParts;
+      } else {
+        // Text-only message
+        messageContent = content;
+      }
+
+      const newMessage: Message = { 
+        id: uuidv4(), 
+        type: "human", 
+        content: messageContent 
       };
+      
       stream.submit(
         { messages: [newMessage] },
         {
@@ -89,7 +95,7 @@ export function useChat({
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, activeAssistant?.assistant_id, activeAssistant?.graph_id, onHistoryRevalidate]
+    [stream, activeAssistant?.config, onHistoryRevalidate]
   );
 
   const runSingleStep = useCallback(
@@ -99,32 +105,10 @@ export function useChat({
       isRerunningSubagent?: boolean,
       optimisticMessages?: Message[]
     ) => {
-      const assistantId = activeAssistant?.assistant_id || "";
-      const graphId = activeAssistant?.graph_id || assistantId;
-      
-      // Add metadata to messages if they don't have it
-      const messagesWithMetadata = messages.map((msg) => ({
-        ...msg,
-        additional_kwargs: {
-          ...msg.additional_kwargs,
-          assistant_id: assistantId,
-          graph_id: graphId,
-        },
-      }));
-      
-      const optimisticMessagesWithMetadata = optimisticMessages?.map((msg) => ({
-        ...msg,
-        additional_kwargs: {
-          ...msg.additional_kwargs,
-          assistant_id: assistantId,
-          graph_id: graphId,
-        },
-      }));
-
       if (checkpoint) {
         stream.submit(undefined, {
-          ...(optimisticMessagesWithMetadata
-            ? { optimisticValues: { messages: optimisticMessagesWithMetadata } }
+          ...(optimisticMessages
+            ? { optimisticValues: { messages: optimisticMessages } }
             : {}),
           config: activeAssistant?.config,
           checkpoint: checkpoint,
@@ -134,12 +118,12 @@ export function useChat({
         });
       } else {
         stream.submit(
-          { messages: messagesWithMetadata },
+          { messages },
           { config: activeAssistant?.config, interruptBefore: ["tools"] }
         );
       }
     },
-    [stream, activeAssistant?.config, activeAssistant?.assistant_id, activeAssistant?.graph_id]
+    [stream, activeAssistant?.config]
   );
 
   const setFiles = useCallback(
@@ -206,5 +190,7 @@ export function useChat({
     stopStream,
     markCurrentThreadAsResolved,
     resumeInterrupt,
+    threadId: threadId ?? null,
+    setThreadId,
   };
 }

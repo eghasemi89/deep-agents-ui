@@ -25,6 +25,8 @@ import {
   FileIcon,
   Sparkles,
   MessageSquare,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import type {
@@ -39,6 +41,41 @@ import { useChatContext } from "@/providers/ChatProvider";
 import { cn } from "@/lib/utils";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { FilesPopover } from "@/app/components/TasksFilesSidebar";
+import { getConfig } from "@/lib/config";
+
+// Upload images to backend
+async function uploadImages(files: File[]): Promise<string[]> {
+  const config = getConfig();
+  if (!config?.deploymentUrl || !config?.authToken) {
+    throw new Error("Configuration missing: deploymentUrl or authToken not found");
+  }
+
+  const baseUrl = config.deploymentUrl.replace(/\/+$/, "");
+  const uploadUrl = `${baseUrl}/api/v1/upload-image`;
+
+  const uploadPromises = files.map(async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.authToken}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to upload image: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.storage_url;
+  });
+
+  return Promise.all(uploadPromises);
+}
 
 interface ChatInterfaceProps {
   assistant: Assistant | null;
@@ -85,8 +122,11 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
   const [metaOpen, setMetaOpen] = useState<"tasks" | "files" | null>(null);
   const tasksContainerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [input, setInput] = useState("");
+  const [selectedImages, setSelectedImages] = useState<Array<{ file: File; preview: string }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const { scrollRef, contentRef } = useStickToBottom();
 
   const {
@@ -101,7 +141,125 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
     interrupt,
     sendMessage,
     resumeInterrupt,
+    threadId,
+    setThreadId,
   } = useChatContext();
+
+  const submitDisabled = isLoading || !assistant;
+
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const imageFiles = Array.from(files).filter((file) => 
+      file.type.startsWith("image/")
+    );
+
+    const newImages = imageFiles.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+
+    setSelectedImages((prev) => [...prev, ...newImages]);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
+
+  const handleRemoveImage = useCallback((index: number) => {
+    setSelectedImages((prev) => {
+      const newImages = [...prev];
+      const removed = newImages.splice(index, 1)[0];
+      if (removed.preview) {
+        URL.revokeObjectURL(removed.preview);
+      }
+      return newImages;
+    });
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (e?: FormEvent) => {
+      if (e) {
+        e.preventDefault();
+      }
+      const messageText = input.trim();
+      if ((!messageText && selectedImages.length === 0) || isLoading || submitDisabled) return;
+      
+      const imagesToUpload = selectedImages.map(img => img.file);
+      
+      // Clean up preview URLs
+      selectedImages.forEach(img => {
+        if (img.preview) {
+          URL.revokeObjectURL(img.preview);
+        }
+      });
+      setSelectedImages([]);
+      
+      // Path A & B: If we have images, upload them first, then send multimodal message
+      // Path C: If no images, just send text message
+      if (imagesToUpload.length > 0) {
+        setIsUploading(true);
+        try {
+          // Upload images first
+          const imageUrls = await uploadImages(imagesToUpload);
+          
+          // Send multimodal message (text + image URLs)
+          // If threadId is null, stream.submit() will automatically create a new thread
+          sendMessage(messageText, imageUrls);
+        } catch (error) {
+          console.error("Failed to upload images:", error);
+          alert(`Failed to upload images: ${error instanceof Error ? error.message : "Unknown error"}`);
+          // Still send text message even if image upload fails
+          if (messageText) {
+            sendMessage(messageText);
+          }
+        } finally {
+          setIsUploading(false);
+        }
+      } else {
+        // Path C: No images, just send text message
+        // If threadId is null, stream.submit() will automatically create a new thread
+        sendMessage(messageText);
+      }
+      
+      setInput("");
+    },
+    [input, isLoading, sendMessage, submitDisabled, selectedImages]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (submitDisabled) return;
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit, submitDisabled]
+  );
+
+  // Auto-expand textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = "auto";
+      // Set height to scrollHeight, but cap at max 200px (about 8-9 lines)
+      const maxHeight = 200;
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [input]);
+
+  // Initialize textarea height on mount
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "44px"; // Initial min height
+    }
+  }, []);
 
   // TODO: can we make this part of the hook?
   const processedMessages = useMemo(() => {
@@ -208,53 +366,6 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
     });
   }, [messages, interrupt]);
 
-  const submitDisabled = isLoading || !assistant;
-
-  const handleSubmit = useCallback(
-    (e?: FormEvent) => {
-      if (e) {
-        e.preventDefault();
-      }
-      const messageText = input.trim();
-      if (!messageText || isLoading || submitDisabled) return;
-      sendMessage(messageText);
-      setInput("");
-    },
-    [input, isLoading, sendMessage, setInput, submitDisabled]
-  );
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (submitDisabled) return;
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit, submitDisabled]
-  );
-
-  // Auto-expand textarea based on content
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      // Reset height to auto to get the correct scrollHeight
-      textarea.style.height = "auto";
-      // Set height to scrollHeight, but cap at max 200px (about 8-9 lines)
-      const maxHeight = 200;
-      const newHeight = Math.min(textarea.scrollHeight, maxHeight);
-      textarea.style.height = `${newHeight}px`;
-    }
-  }, [input]);
-
-  // Initialize textarea height on mount
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "44px"; // Initial min height
-    }
-  }, []);
-
   const groupedTodos = {
     in_progress: todos.filter((t) => t.status === "in_progress"),
     pending: todos.filter((t) => t.status === "pending"),
@@ -280,6 +391,18 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
       reviewConfigs.map((rc: ReviewConfig) => [rc.actionName, rc])
     );
   }, [interrupt]);
+
+
+  // Clean up preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      selectedImages.forEach((img) => {
+        if (img.preview) {
+          URL.revokeObjectURL(img.preview);
+        }
+      });
+    };
+  }, [selectedImages]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -544,6 +667,26 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
             onSubmit={handleSubmit}
             className="flex flex-col"
           >
+            {selectedImages.length > 0 && (
+              <div className="flex gap-2 px-[18px] py-2 overflow-x-auto">
+                {selectedImages.map((img, index) => (
+                  <div key={index} className="relative flex-shrink-0">
+                    <img
+                      src={img.preview}
+                      alt={`Preview ${index + 1}`}
+                      className="h-10 w-10 object-cover rounded border border-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={input}
@@ -602,16 +745,40 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
                   </Select>
                 )}
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex items-center justify-end gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading || isUploading || submitDisabled}
+                  className="h-7 w-7"
+                >
+                  <ImageIcon size={16} />
+                </Button>
                 <Button
                   type="submit"
                   variant="default"
                   onClick={handleSubmit}
-                  disabled={submitDisabled || !input.trim()}
+                  disabled={isLoading || isUploading || submitDisabled || (!input.trim() && selectedImages.length === 0)}
                   className="h-7 px-3 text-xs"
                 >
-                  <ArrowUp size={14} />
-                  <span>Send</span>
+                  {isUploading ? (
+                    <span>Uploading...</span>
+                  ) : (
+                    <>
+                      <ArrowUp size={14} />
+                      <span>Send</span>
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
