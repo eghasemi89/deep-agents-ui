@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import React from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   type Message,
@@ -37,12 +38,21 @@ export function useChat({
   const [threadId, setThreadId] = useQueryState("threadId");
   const client = useClient();
 
+  const handleThreadId = useCallback(
+    (newThreadId: string | null) => {
+      setThreadId(newThreadId);
+      // Note: organization_id is now set by the backend auth handler
+      // No need to patch it from the frontend for security
+    },
+    [setThreadId]
+  );
+
   const stream = useStream<StateType>({
     assistantId: activeAssistant?.assistant_id || "",
     client: client ?? undefined,
     reconnectOnMount: true,
     threadId: threadId ?? null,
-    onThreadId: setThreadId,
+    onThreadId: handleThreadId,
     defaultHeaders: { "x-auth-scheme": "langsmith" },
     fetchStateHistory: true,
     // Revalidate thread list when stream finishes, errors, or creates new thread
@@ -55,7 +65,18 @@ export function useChat({
 
   const sendMessage = useCallback(
     (content: string) => {
-      const newMessage: Message = { id: uuidv4(), type: "human", content };
+      const assistantId = activeAssistant?.assistant_id || "";
+      const graphId = activeAssistant?.graph_id || assistantId;
+      
+      const newMessage: Message = {
+        id: uuidv4(),
+        type: "human",
+        content,
+        additional_kwargs: {
+          assistant_id: assistantId,
+          graph_id: graphId,
+        },
+      };
       stream.submit(
         { messages: [newMessage] },
         {
@@ -68,7 +89,7 @@ export function useChat({
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate]
+    [stream, activeAssistant?.config, activeAssistant?.assistant_id, activeAssistant?.graph_id, onHistoryRevalidate]
   );
 
   const runSingleStep = useCallback(
@@ -78,10 +99,32 @@ export function useChat({
       isRerunningSubagent?: boolean,
       optimisticMessages?: Message[]
     ) => {
+      const assistantId = activeAssistant?.assistant_id || "";
+      const graphId = activeAssistant?.graph_id || assistantId;
+      
+      // Add metadata to messages if they don't have it
+      const messagesWithMetadata = messages.map((msg) => ({
+        ...msg,
+        additional_kwargs: {
+          ...msg.additional_kwargs,
+          assistant_id: assistantId,
+          graph_id: graphId,
+        },
+      }));
+      
+      const optimisticMessagesWithMetadata = optimisticMessages?.map((msg) => ({
+        ...msg,
+        additional_kwargs: {
+          ...msg.additional_kwargs,
+          assistant_id: assistantId,
+          graph_id: graphId,
+        },
+      }));
+
       if (checkpoint) {
         stream.submit(undefined, {
-          ...(optimisticMessages
-            ? { optimisticValues: { messages: optimisticMessages } }
+          ...(optimisticMessagesWithMetadata
+            ? { optimisticValues: { messages: optimisticMessagesWithMetadata } }
             : {}),
           config: activeAssistant?.config,
           checkpoint: checkpoint,
@@ -91,12 +134,12 @@ export function useChat({
         });
       } else {
         stream.submit(
-          { messages },
+          { messages: messagesWithMetadata },
           { config: activeAssistant?.config, interruptBefore: ["tools"] }
         );
       }
     },
-    [stream, activeAssistant?.config]
+    [stream, activeAssistant?.config, activeAssistant?.assistant_id, activeAssistant?.graph_id]
   );
 
   const setFiles = useCallback(

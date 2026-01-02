@@ -14,6 +14,7 @@ import { Message } from "@langchain/langgraph-sdk";
 import {
   extractSubAgentContent,
   extractStringFromMessageContent,
+  getAgentNameFromGraphId,
 } from "@/app/utils/utils";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,28 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     const messageContent = extractStringFromMessageContent(message);
     const hasContent = messageContent && messageContent.trim() !== "";
     const hasToolCalls = toolCalls.length > 0;
+    
+    // Extract agent info from message metadata
+    // Try message.additional_kwargs first, then fallback to prop graphId (current assistant)
+    const messageGraphId = 
+      (message.additional_kwargs?.graph_id as string | undefined) || 
+      (message.type === "ai" ? graphId : undefined);
+    
+    const agentName = useMemo(() => {
+      if (!messageGraphId) return null;
+      const name = getAgentNameFromGraphId(messageGraphId);
+      // Debug logging (remove in production)
+      if (process.env.NODE_ENV === "development") {
+        console.log("Message graph_id:", {
+          messageId: message.id,
+          messageType: message.type,
+          graphId: messageGraphId,
+          agentName: name,
+          additional_kwargs: message.additional_kwargs,
+        });
+      }
+      return name;
+    }, [messageGraphId, message.id, message.type, message.additional_kwargs]);
     const subAgents = useMemo(() => {
       return toolCalls
         .filter((toolCall: ToolCall) => {
@@ -116,9 +139,28 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                   <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {messageContent}
                   </p>
-                ) : hasContent ? (
-                  <MarkdownContent content={messageContent} />
-                ) : null}
+                ) : (
+                  <>
+                    {agentName && (
+                      <div className="mb-2">
+                        <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          {agentName}
+                        </span>
+                      </div>
+                    )}
+                    {/* Debug: Show graph_id even if agentName is null */}
+                    {process.env.NODE_ENV === "development" && messageGraphId && !agentName && (
+                      <div className="mb-2">
+                        <span className="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                          Debug: {messageGraphId}
+                        </span>
+                      </div>
+                    )}
+                    {hasContent ? (
+                      <MarkdownContent content={messageContent} />
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
           )}

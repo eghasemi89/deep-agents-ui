@@ -155,3 +155,35 @@ export function formatConversationForLLM(messages: Message[]): string {
   const formattedMessages = messages.map(formatMessageForLLM);
   return formattedMessages.join("\n\n---\n\n");
 }
+
+/**
+ * Maps graph_id to a human-readable agent name.
+ * @param graphId - The graph_id from message.additional_kwargs
+ * @returns The agent name or null if not recognized
+ */
+export function getAgentNameFromGraphId(graphId: string | undefined | null): string | null {
+  if (!graphId) return null;
+  
+  // Map known graph_ids to agent names
+  const agentMap: Record<string, string> = {
+    "research": "Research",
+    "chat": "Chat",
+  };
+  
+  // Check exact match first
+  if (agentMap[graphId]) {
+    return agentMap[graphId];
+  }
+  
+  // Check if graphId contains any of the known agent IDs (for UUIDs that might have graph_id in metadata)
+  for (const [id, name] of Object.entries(agentMap)) {
+    if (graphId.includes(id) || graphId.toLowerCase().includes(id)) {
+      return name;
+    }
+  }
+  
+  // If it's a UUID, return null (we don't know the agent type)
+  // Otherwise, return the graphId as-is (might be a custom agent name)
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(graphId);
+  return isUUID ? null : graphId;
+}
