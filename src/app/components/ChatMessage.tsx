@@ -14,6 +14,7 @@ import { Message } from "@langchain/langgraph-sdk";
 import {
   extractSubAgentContent,
   extractStringFromMessageContent,
+  extractImageUrlsFromMessageContent,
 } from "@/app/utils/utils";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,8 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     const isUser = message.type === "human";
     const messageContent = extractStringFromMessageContent(message);
     const hasContent = messageContent && messageContent.trim() !== "";
+    const imageUrls = extractImageUrlsFromMessageContent(message);
+    const hasImages = imageUrls.length > 0;
     const hasToolCalls = toolCalls.length > 0;
     const subAgents = useMemo(() => {
       return toolCalls
@@ -97,7 +100,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
             isUser ? "max-w-[70%]" : "w-full"
           )}
         >
-          {hasContent && (
+          {(hasContent || hasImages) && (
             <div className={cn("relative flex items-end gap-0")}>
               <div
                 className={cn(
@@ -113,9 +116,25 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                 }
               >
                 {isUser ? (
-                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
-                    {messageContent}
-                  </p>
+                  <>
+                    {hasImages && (
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        {imageUrls.map((url, index) => (
+                          <img
+                            key={index}
+                            src={url}
+                            alt={`Uploaded image ${index + 1}`}
+                            className="max-h-32 max-w-48 rounded-md object-contain border border-border/50"
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {hasContent && (
+                      <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
+                        {messageContent}
+                      </p>
+                    )}
+                  </>
                 ) : hasContent ? (
                   <MarkdownContent content={messageContent} />
                 ) : null}

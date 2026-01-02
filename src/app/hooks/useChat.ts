@@ -54,11 +54,14 @@ export function useChat({
   });
 
   const sendMessage = useCallback(
-    (content: string, imageUrls: string[] = []) => {
+    (content: string, uploadedImages: Array<{ doc_id: string; storage_url: string; storage_path: string }> = []) => {
       // Build message content with text and/or images
       let messageContent: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
       
-      if (imageUrls.length > 0) {
+      // Build additional_kwargs with image metadata
+      const additional_kwargs: Record<string, unknown> = {};
+      
+      if (uploadedImages.length > 0) {
         // Multimodal message with text and images
         const contentParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
         
@@ -66,12 +69,19 @@ export function useChat({
           contentParts.push({ type: "text" as const, text: content });
         }
         
-        // Add each image URL
-        imageUrls.forEach((url) => {
-          contentParts.push({ type: "image_url" as const, image_url: { url } });
+        // Add each image URL to content
+        uploadedImages.forEach((image) => {
+          contentParts.push({ type: "image_url" as const, image_url: { url: image.storage_url } });
         });
         
         messageContent = contentParts;
+        
+        // Add image metadata to additional_kwargs
+        // Include doc_id (for database deletion) and storage_path (for storage deletion)
+        additional_kwargs.uploaded_images = uploadedImages.map((image) => ({
+          doc_id: image.doc_id,
+          storage_path: image.storage_path,
+        }));
       } else {
         // Text-only message
         messageContent = content;
@@ -80,7 +90,8 @@ export function useChat({
       const newMessage: Message = { 
         id: uuidv4(), 
         type: "human", 
-        content: messageContent 
+        content: messageContent,
+        additional_kwargs: Object.keys(additional_kwargs).length > 0 ? additional_kwargs : undefined,
       };
       
       stream.submit(

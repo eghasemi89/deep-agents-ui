@@ -43,8 +43,15 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import { FilesPopover } from "@/app/components/TasksFilesSidebar";
 import { getConfig } from "@/lib/config";
 
+// Type for uploaded image data
+interface UploadedImage {
+  doc_id: string;
+  storage_url: string;
+  storage_path: string;
+}
+
 // Upload images to backend
-async function uploadImages(files: File[]): Promise<string[]> {
+async function uploadImages(files: File[]): Promise<UploadedImage[]> {
   const config = getConfig();
   if (!config?.deploymentUrl || !config?.authToken) {
     throw new Error("Configuration missing: deploymentUrl or authToken not found");
@@ -71,7 +78,11 @@ async function uploadImages(files: File[]): Promise<string[]> {
     }
 
     const data = await response.json();
-    return data.storage_url;
+    return {
+      doc_id: data.doc_id,
+      storage_url: data.storage_url,
+      storage_path: data.storage_path,
+    };
   });
 
   return Promise.all(uploadPromises);
@@ -203,11 +214,11 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
         setIsUploading(true);
         try {
           // Upload images first
-          const imageUrls = await uploadImages(imagesToUpload);
+          const uploadedImages = await uploadImages(imagesToUpload);
           
           // Send multimodal message (text + image URLs)
           // If threadId is null, stream.submit() will automatically create a new thread
-          sendMessage(messageText, imageUrls);
+          sendMessage(messageText, uploadedImages);
         } catch (error) {
           console.error("Failed to upload images:", error);
           alert(`Failed to upload images: ${error instanceof Error ? error.message : "Unknown error"}`);

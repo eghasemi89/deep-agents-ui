@@ -30,6 +30,42 @@ export function extractStringFromMessageContent(message: Message): string {
     : "";
 }
 
+/**
+ * Extracts image URLs from message content.
+ * @param message - The message to extract images from
+ * @returns Array of image URLs found in the message
+ */
+export function extractImageUrlsFromMessageContent(message: Message): string[] {
+  if (typeof message.content === "string") {
+    return [];
+  }
+  
+  if (!Array.isArray(message.content)) {
+    return [];
+  }
+  
+  const imageUrls: string[] = [];
+  
+  message.content.forEach((c: unknown) => {
+    if (
+      typeof c === "object" &&
+      c !== null &&
+      "type" in c &&
+      (c as { type: string }).type === "image_url"
+    ) {
+      const imageContent = c as {
+        type: string;
+        image_url?: { url?: string };
+      };
+      if (imageContent.image_url?.url) {
+        imageUrls.push(imageContent.image_url.url);
+      }
+    }
+  });
+  
+  return imageUrls;
+}
+
 export function extractSubAgentContent(data: unknown): string {
   if (typeof data === "string") {
     return data;
