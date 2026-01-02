@@ -18,7 +18,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Square,
   ArrowUp,
   CheckCircle,
   Clock,
@@ -101,56 +100,8 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
     isThreadLoading,
     interrupt,
     sendMessage,
-    stopStream,
     resumeInterrupt,
   } = useChatContext();
-
-  const submitDisabled = isLoading || !assistant;
-
-  const handleSubmit = useCallback(
-    (e?: FormEvent) => {
-      if (e) {
-        e.preventDefault();
-      }
-      const messageText = input.trim();
-      if (!messageText || isLoading || submitDisabled) return;
-      sendMessage(messageText);
-      setInput("");
-    },
-    [input, isLoading, sendMessage, setInput, submitDisabled]
-  );
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (submitDisabled) return;
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit, submitDisabled]
-  );
-
-  // Auto-expand textarea based on content
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      // Reset height to auto to get the correct scrollHeight
-      textarea.style.height = "auto";
-      // Set height to scrollHeight, but cap at max 200px (about 8-9 lines)
-      const maxHeight = 200;
-      const newHeight = Math.min(textarea.scrollHeight, maxHeight);
-      textarea.style.height = `${newHeight}px`;
-    }
-  }, [input]);
-
-  // Initialize textarea height on mount
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "44px"; // Initial min height
-    }
-  }, []);
 
   // TODO: can we make this part of the hook?
   const processedMessages = useMemo(() => {
@@ -256,6 +207,53 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
       };
     });
   }, [messages, interrupt]);
+
+  const submitDisabled = isLoading || !assistant;
+
+  const handleSubmit = useCallback(
+    (e?: FormEvent) => {
+      if (e) {
+        e.preventDefault();
+      }
+      const messageText = input.trim();
+      if (!messageText || isLoading || submitDisabled) return;
+      sendMessage(messageText);
+      setInput("");
+    },
+    [input, isLoading, sendMessage, setInput, submitDisabled]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (submitDisabled) return;
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit, submitDisabled]
+  );
+
+  // Auto-expand textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = "auto";
+      // Set height to scrollHeight, but cap at max 200px (about 8-9 lines)
+      const maxHeight = 200;
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [input]);
+
+  // Initialize textarea height on mount
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "44px"; // Initial min height
+    }
+  }, []);
 
   const groupedTodos = {
     in_progress: todos.filter((t) => t.status === "in_progress"),
@@ -606,23 +604,14 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
               </div>
               <div className="flex justify-end gap-2">
                 <Button
-                  type={isLoading ? "button" : "submit"}
-                  variant={isLoading ? "destructive" : "default"}
-                  onClick={isLoading ? stopStream : handleSubmit}
-                  disabled={!isLoading && (submitDisabled || !input.trim())}
+                  type="submit"
+                  variant="default"
+                  onClick={handleSubmit}
+                  disabled={submitDisabled || !input.trim()}
                   className="h-7 px-3 text-xs"
                 >
-                  {isLoading ? (
-                    <>
-                      <Square size={12} />
-                      <span>Stop</span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUp size={14} />
-                      <span>Send</span>
-                    </>
-                  )}
+                  <ArrowUp size={14} />
+                  <span>Send</span>
                 </Button>
               </div>
             </div>
