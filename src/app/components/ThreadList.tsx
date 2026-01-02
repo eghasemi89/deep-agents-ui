@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ThreadItem } from "@/app/hooks/useThreads";
 import { useThreads } from "@/app/hooks/useThreads";
+import { getConfig } from "@/lib/config";
 
 type StatusFilter = "all" | "idle" | "busy" | "interrupted" | "error";
 
@@ -123,8 +124,9 @@ export function ThreadList({
   onClose,
   onInterruptCountChange,
 }: ThreadListProps) {
-  const [currentThreadId] = useQueryState("threadId");
+  const [currentThreadId, setThreadId] = useQueryState("threadId");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
 
   const threads = useThreads({
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -205,6 +207,65 @@ export function ThreadList({
   useEffect(() => {
     onInterruptCountChange?.(interruptedCount);
   }, [interruptedCount, onInterruptCountChange]);
+
+  const handleDeleteThread = useCallback(
+    async (threadId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      
+      if (!confirm("Are you sure you want to delete this thread?")) {
+        return;
+      }
+
+      setDeletingThreadId(threadId);
+      try {
+        const config = getConfig();
+        if (!config?.deploymentUrl) {
+          throw new Error("Deployment URL not found in config");
+        }
+
+        const baseUrl = config.deploymentUrl.replace(/\/+$/, "");
+        const url = `${baseUrl}/threads/${threadId}`;
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        
+        if (config.authToken) {
+          headers["Authorization"] = `Bearer ${config.authToken}`;
+        }
+        
+        const apiKey = config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
+        if (apiKey) {
+          headers["X-Api-Key"] = apiKey;
+        }
+
+        headers["x-auth-scheme"] = "langsmith";
+        
+        const response = await fetch(url, {
+          method: "DELETE",
+          headers,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => response.statusText);
+          throw new Error(`Failed to delete thread: ${response.status} ${errorText}`);
+        }
+
+        if (currentThreadId === threadId) {
+          await setThreadId(null);
+        }
+
+        threads.mutate();
+      } catch (error) {
+        console.error("Error deleting thread:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        alert(`Failed to delete thread: ${errorMessage}`);
+      } finally {
+        setDeletingThreadId(null);
+      }
+    },
+    [currentThreadId, setThreadId, threads]
+  );
 
   return (
     <div className="absolute inset-0 flex flex-col">
@@ -297,45 +358,67 @@ export function ThreadList({
                   </h4>
                   <div className="flex flex-col gap-1">
                     {groupThreads.map((thread) => (
-                      <button
+                      <div
                         key={thread.id}
-                        type="button"
-                        onClick={() => onThreadSelect(thread.id, thread.assistantId)}
                         className={cn(
-                          "grid w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200",
+                          "group relative grid w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200",
                           "hover:bg-accent",
                           currentThreadId === thread.id
                             ? "border border-primary bg-accent hover:bg-accent"
                             : "border border-transparent bg-transparent"
                         )}
-                        aria-current={currentThreadId === thread.id}
                       >
-                        <div className="min-w-0 flex-1">
-                          {/* Title + Timestamp Row */}
-                          <div className="mb-1 flex items-center justify-between">
-                            <h3 className="truncate text-sm font-semibold">
-                              {thread.title}
-                            </h3>
-                            <span className="ml-2 flex-shrink-0 text-xs text-muted-foreground">
-                              {formatTime(thread.updatedAt)}
-                            </span>
-                          </div>
-                          {/* Description + Status Row */}
-                          <div className="flex items-center justify-between">
-                            <p className="flex-1 truncate text-sm text-muted-foreground">
-                              {thread.description}
-                            </p>
-                            <div className="ml-2 flex-shrink-0">
-                              <div
-                                className={cn(
-                                  "h-2 w-2 rounded-full",
-                                  getThreadColor(thread.status)
-                                )}
-                              />
+                        <button
+                          type="button"
+                          onClick={() => onThreadSelect(thread.id, thread.assistantId)}
+                          className="min-w-0 flex-1 text-left"
+                          aria-current={currentThreadId === thread.id}
+                        >
+                          <div className="min-w-0 flex-1">
+                            {/* Title + Timestamp Row */}
+                            <div className="mb-1 flex items-center justify-between">
+                              <h3 className="truncate text-sm font-semibold">
+                                {thread.title}
+                              </h3>
+                              <span className="ml-2 flex-shrink-0 text-xs text-muted-foreground">
+                                {formatTime(thread.updatedAt)}
+                              </span>
+                            </div>
+                            {/* Description + Status Row */}
+                            <div className="flex items-center justify-between">
+                              <p className="flex-1 truncate text-sm text-muted-foreground">
+                                {thread.description}
+                              </p>
+                              <div className="ml-2 flex-shrink-0">
+                                <div
+                                  className={cn(
+                                    "h-2 w-2 rounded-full",
+                                    getThreadColor(thread.status)
+                                  )}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteThread(thread.id, e)}
+                          disabled={deletingThreadId === thread.id}
+                          className={cn(
+                            "absolute right-2 top-1/2 -translate-y-1/2 flex-shrink-0 rounded p-1 opacity-0 transition-opacity",
+                            "hover:bg-destructive/10 hover:text-destructive",
+                            "group-hover:opacity-100",
+                            deletingThreadId === thread.id && "opacity-100 cursor-not-allowed"
+                          )}
+                          aria-label="Delete thread"
+                        >
+                          {deletingThreadId === thread.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
