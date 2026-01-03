@@ -213,8 +213,7 @@ export function useChat({
           ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
           // Always include selected_subagents if it exists (even if empty array)
           ...(runtimeConfig?.selected_subagents !== undefined ? { selected_subagents: runtimeConfig.selected_subagents } : {}),
-          ...(runtimeConfig?.subagent_model_name ? { subagent_model_name: runtimeConfig.subagent_model_name } : {}),
-          ...(runtimeConfig?.subagent_selected_tools ? { subagent_selected_tools: runtimeConfig.subagent_selected_tools } : {}),
+          // Subagent model and tools are now handled by backend defaults - not exposed to frontend
         },
       };
 
@@ -322,8 +321,7 @@ export function useChat({
           ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
           // Always include selected_subagents if it exists (even if empty array)
           ...(runtimeConfig?.selected_subagents !== undefined ? { selected_subagents: runtimeConfig.selected_subagents } : {}),
-          ...(runtimeConfig?.subagent_model_name ? { subagent_model_name: runtimeConfig.subagent_model_name } : {}),
-          ...(runtimeConfig?.subagent_selected_tools ? { subagent_selected_tools: runtimeConfig.subagent_selected_tools } : {}),
+          // Subagent model and tools are now handled by backend defaults - not exposed to frontend
         },
       };
 

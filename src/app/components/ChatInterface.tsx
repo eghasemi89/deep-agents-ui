@@ -186,11 +186,19 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
     updateRuntimeConfig,
   } = useChatContext();
 
-  // Use context runtimeConfig
+  // Use context runtimeConfig with defaults
+  // Default: all subagents selected (user can deselect)
+  const defaultSubagents = availableSubagents.map(s => s.value);
   const effectiveRuntimeConfig = contextRuntimeConfig || {
     model_name: "openai:gpt-4o",
     selected_tools: ["tavily_search", "think_tool"],
+    selected_subagents: defaultSubagents,
   };
+  
+  // Ensure selected_subagents defaults to all if not set
+  if (!effectiveRuntimeConfig.selected_subagents || effectiveRuntimeConfig.selected_subagents.length === 0) {
+    effectiveRuntimeConfig.selected_subagents = defaultSubagents;
+  }
   
   const setEffectiveRuntimeConfig = useCallback((updater: RuntimeConfig | ((prev: RuntimeConfig) => RuntimeConfig)) => {
     if (updateRuntimeConfig) {
@@ -598,19 +606,10 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
                     </div>
                   </div>
 
-                  {/* Subagent Configuration */}
+                  {/* Subagents */}
                   <div className="border-t border-border pt-4 mt-4">
-                    <Label className="text-sm font-semibold mb-3 block">Subagent Configuration</Label>
-                    <div className="space-y-4 pl-2 border-l-2 border-border/50">
-                      {/* Subagent Selection */}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">
-                          Select Subagents
-                          <span className="text-xs text-muted-foreground ml-1 font-normal">
-                            (choose which subagents to include)
-                          </span>
-                        </Label>
-                        <div className="space-y-2">
+                    <Label className="text-sm font-semibold mb-3 block">Subagents</Label>
+                    <div className="space-y-2 pl-2 border-l-2 border-border/50">
                           {availableSubagents.map((subagent) => {
                             // Check if subagent is selected (handle undefined and empty array cases)
                             const selectedSubagents = effectiveRuntimeConfig.selected_subagents || [];
@@ -663,88 +662,6 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
                               </div>
                             );
                           })}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="subagent-model-select" className="text-sm font-medium">
-                          Subagent Model
-                          <span className="text-xs text-muted-foreground ml-1 font-normal">
-                            (optional - uses main model if not set)
-                          </span>
-                        </Label>
-                        <Select
-                          value={effectiveRuntimeConfig.subagent_model_name || "__use_main__"}
-                          onValueChange={(value) => {
-                            setEffectiveRuntimeConfig((prev: RuntimeConfig) => ({
-                              ...prev,
-                              subagent_model_name: value === "__use_main__" ? undefined : value,
-                            }));
-                          }}
-                        >
-                          <SelectTrigger id="subagent-model-select" className="h-9">
-                            <SelectValue placeholder="Use main agent model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__use_main__">Use main agent model</SelectItem>
-                            {availableModels.map((model) => (
-                              <SelectItem key={model.value} value={model.value}>
-                                {model.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">
-                          Subagent Tools
-                          <span className="text-xs text-muted-foreground ml-1 font-normal">
-                            (optional - uses main agent tools if not set)
-                          </span>
-                        </Label>
-                        <div className="space-y-2">
-                          {availableTools.map((tool) => {
-                            const isChecked = effectiveRuntimeConfig.subagent_selected_tools?.includes(tool.value) ?? false;
-                            const handleToggle = () => {
-                              setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
-                                const currentTools = prev?.subagent_selected_tools || [];
-                                const newTools = !isChecked
-                                  ? (currentTools.includes(tool.value) 
-                                      ? currentTools 
-                                      : [...currentTools, tool.value])
-                                  : currentTools.filter((t) => t !== tool.value);
-                                
-                                return {
-                                  ...prev,
-                                  subagent_selected_tools: newTools.length > 0 ? newTools : undefined,
-                                };
-                              });
-                            };
-                            
-                            return (
-                              <div 
-                                key={`subagent-${tool.value}`} 
-                                className="flex items-center space-x-2"
-                              >
-                                <Checkbox
-                                  id={`subagent-tool-${tool.value}`}
-                                  checked={isChecked}
-                                  onCheckedChange={handleToggle}
-                                />
-                                <Label
-                                  htmlFor={`subagent-tool-${tool.value}`}
-                                  className="text-sm font-normal cursor-pointer select-none"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleToggle();
-                                  }}
-                                >
-                                  {tool.label}
-                                </Label>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
