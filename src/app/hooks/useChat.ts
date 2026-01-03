@@ -13,8 +13,9 @@ import type { TodoItem } from "@/app/types/types";
 import { useClient } from "@/providers/ClientProvider";
 import { useQueryState } from "nuqs";
 import { getConfig } from "@/lib/config";
+import type { RuntimeConfig } from "@/providers/ChatProvider";
 
-export type StateType = {
+export type StateType ={
   messages: Message[];
   todos: TodoItem[];
   files: Record<string, string>;
@@ -30,10 +31,12 @@ export function useChat({
   activeAssistant,
   onHistoryRevalidate,
   thread,
+  runtimeConfig,
 }: {
   activeAssistant: Assistant | null;
   onHistoryRevalidate?: () => void;
   thread?: UseStreamThread<StateType>;
+  runtimeConfig?: RuntimeConfig;
 }) {
   const [threadId, setThreadId] = useQueryState("threadId");
   const client = useClient();
@@ -200,13 +203,24 @@ export function useChat({
         additional_kwargs: Object.keys(additional_kwargs).length > 0 ? additional_kwargs : undefined,
       };
       
+      // Merge runtime config into configurable
+      const config = {
+        ...(activeAssistant?.config ?? {}),
+        recursion_limit: 100,
+        configurable: {
+          ...(activeAssistant?.config?.configurable ?? {}),
+          ...(runtimeConfig?.model_name ? { model_name: runtimeConfig.model_name } : {}),
+          ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
+        },
+      };
+
       stream.submit(
         { messages: [newMessage] },
         {
           optimisticValues: (prev) => ({
             messages: [...(prev.messages ?? []), newMessage],
           }),
-          config: { ...(activeAssistant?.config ?? {}), recursion_limit: 100 },
+          config,
         }
       );
       
@@ -231,7 +245,7 @@ export function useChat({
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate, threadId, patchThreadWithImages]
+    [stream, activeAssistant?.config, runtimeConfig, onHistoryRevalidate, threadId, patchThreadWithImages]
   );
 
   const runSingleStep = useCallback(
@@ -242,24 +256,44 @@ export function useChat({
       optimisticMessages?: Message[]
     ) => {
       if (checkpoint) {
+        // Merge runtime config into configurable
+        const config = {
+          ...(activeAssistant?.config ?? {}),
+          configurable: {
+            ...(activeAssistant?.config?.configurable ?? {}),
+            ...(runtimeConfig?.model_name ? { model_name: runtimeConfig.model_name } : {}),
+            ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
+          },
+        };
+
         stream.submit(undefined, {
           ...(optimisticMessages
             ? { optimisticValues: { messages: optimisticMessages } }
             : {}),
-          config: activeAssistant?.config,
+          config,
           checkpoint: checkpoint,
           ...(isRerunningSubagent
             ? { interruptAfter: ["tools"] }
             : { interruptBefore: ["tools"] }),
         });
       } else {
+        // Merge runtime config into configurable
+        const config = {
+          ...(activeAssistant?.config ?? {}),
+          configurable: {
+            ...(activeAssistant?.config?.configurable ?? {}),
+            ...(runtimeConfig?.model_name ? { model_name: runtimeConfig.model_name } : {}),
+            ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
+          },
+        };
+
         stream.submit(
           { messages },
-          { config: activeAssistant?.config, interruptBefore: ["tools"] }
+          { config, interruptBefore: ["tools"] }
         );
       }
     },
-    [stream, activeAssistant?.config]
+    [stream, activeAssistant?.config, runtimeConfig]
   );
 
   const setFiles = useCallback(
@@ -274,11 +308,19 @@ export function useChat({
 
   const continueStream = useCallback(
     (hasTaskToolCall?: boolean) => {
-      stream.submit(undefined, {
-        config: {
-          ...(activeAssistant?.config || {}),
-          recursion_limit: 100,
+      // Merge runtime config into configurable
+      const config = {
+        ...(activeAssistant?.config ?? {}),
+        recursion_limit: 100,
+        configurable: {
+          ...(activeAssistant?.config?.configurable ?? {}),
+          ...(runtimeConfig?.model_name ? { model_name: runtimeConfig.model_name } : {}),
+          ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
         },
+      };
+
+      stream.submit(undefined, {
+        config,
         ...(hasTaskToolCall
           ? { interruptAfter: ["tools"] }
           : { interruptBefore: ["tools"] }),

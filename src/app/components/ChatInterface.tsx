@@ -27,6 +27,9 @@ import {
   MessageSquare,
   Image as ImageIcon,
   X,
+  Settings,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import type {
@@ -42,6 +45,9 @@ import { cn } from "@/lib/utils";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { FilesPopover } from "@/app/components/TasksFilesSidebar";
 import { getConfig } from "@/lib/config";
+import type { RuntimeConfig } from "@/providers/ChatProvider";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Type for uploaded image data
 interface UploadedImage {
@@ -138,7 +144,23 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
   const [input, setInput] = useState("");
   const [selectedImages, setSelectedImages] = useState<Array<{ file: File; preview: string }>>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   const { scrollRef, contentRef } = useStickToBottom();
+
+  // Available models
+  const availableModels = [
+    { value: "openai:gpt-4o", label: "GPT-4o (OpenAI)" },
+    { value: "openai:gpt-4-turbo", label: "GPT-4 Turbo (OpenAI)" },
+    { value: "anthropic:claude-sonnet-4-5-20250514", label: "Claude Sonnet 4.5 (Anthropic)" },
+    { value: "anthropic:claude-opus-4-20250514", label: "Claude Opus 4 (Anthropic)" },
+    { value: "google:gemini-3-pro-preview", label: "Gemini 3 Pro (Google)" },
+  ];
+
+  // Available tools
+  const availableTools = [
+    { value: "tavily_search", label: "Tavily Search" },
+    { value: "think_tool", label: "Think Tool" },
+  ];
 
   const {
     stream,
@@ -154,7 +176,21 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
     resumeInterrupt,
     threadId,
     setThreadId,
+    runtimeConfig: contextRuntimeConfig,
+    updateRuntimeConfig,
   } = useChatContext();
+
+  // Use context runtimeConfig
+  const effectiveRuntimeConfig = contextRuntimeConfig || {
+    model_name: "openai:gpt-4o",
+    selected_tools: ["tavily_search", "think_tool"],
+  };
+  
+  const setEffectiveRuntimeConfig = useCallback((updater: RuntimeConfig | ((prev: RuntimeConfig) => RuntimeConfig)) => {
+    if (updateRuntimeConfig) {
+      updateRuntimeConfig(updater);
+    }
+  }, [updateRuntimeConfig]);
 
   const submitDisabled = isLoading || !assistant;
 
@@ -461,6 +497,106 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
       </div>
 
       <div className="flex-shrink-0 bg-background">
+        {/* Configuration Panel */}
+        {selectedAgentId === "research" && (
+          <div className="mx-4 mb-2">
+            <button
+              type="button"
+              onClick={() => setShowConfig(!showConfig)}
+              className="flex w-full items-center justify-between rounded-lg border border-border bg-sidebar px-4 py-2 text-sm hover:bg-accent"
+            >
+              <div className="flex items-center gap-2">
+                <Settings size={14} />
+                <span>Agent Configuration</span>
+                {effectiveRuntimeConfig.model_name && (
+                  <span className="text-xs text-muted-foreground">
+                    ({effectiveRuntimeConfig.model_name.split(":")[1] || effectiveRuntimeConfig.model_name})
+                  </span>
+                )}
+              </div>
+              {showConfig ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {showConfig && (
+              <div className="mt-2 rounded-lg border border-border bg-sidebar p-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="model-select" className="text-sm font-medium">
+                      Model
+                    </Label>
+                    <Select
+                      value={effectiveRuntimeConfig.model_name || "openai:gpt-4o"}
+                      onValueChange={(value) => {
+                        setEffectiveRuntimeConfig((prev: RuntimeConfig) => ({
+                          ...prev,
+                          model_name: value,
+                        }));
+                      }}
+                    >
+                      <SelectTrigger id="model-select" className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModels.map((model) => (
+                          <SelectItem key={model.value} value={model.value}>
+                            {model.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Tools</Label>
+                    <div className="space-y-2">
+                      {availableTools.map((tool) => {
+                        const isChecked = effectiveRuntimeConfig.selected_tools?.includes(tool.value) ?? false;
+                        const handleToggle = () => {
+                          const newChecked = !isChecked;
+                          setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
+                            const currentTools = prev?.selected_tools || [];
+                            const newTools = newChecked
+                              ? (currentTools.includes(tool.value) 
+                                  ? currentTools 
+                                  : [...currentTools, tool.value])
+                              : currentTools.filter((t) => t !== tool.value);
+                            
+                            return {
+                              ...prev,
+                              selected_tools: newTools,
+                            };
+                          });
+                        };
+                        
+                        return (
+                          <div 
+                            key={tool.value} 
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
+                              id={`tool-${tool.value}`}
+                              checked={isChecked}
+                              onCheckedChange={handleToggle}
+                            />
+                            <Label
+                              htmlFor={`tool-${tool.value}`}
+                              className="text-sm font-normal cursor-pointer select-none"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleToggle();
+                              }}
+                            >
+                              {tool.label}
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div
           className={cn(
             "mx-4 mb-6 flex flex-shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background",
