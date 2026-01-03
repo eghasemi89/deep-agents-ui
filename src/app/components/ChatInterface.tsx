@@ -28,8 +28,6 @@ import {
   Image as ImageIcon,
   X,
   Settings,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import type {
@@ -511,163 +509,149 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
       </div>
 
       <div className="flex-shrink-0 bg-background">
-        {/* Configuration Panel */}
-        {selectedAgentId === "research" && (
-          <div className="mx-4 mb-2">
-            <button
-              type="button"
-              onClick={() => setShowConfig(!showConfig)}
-              className="flex w-full items-center justify-between rounded-lg border border-border bg-sidebar px-4 py-2 text-sm hover:bg-accent"
-            >
-              <div className="flex items-center gap-2">
-                <Settings size={14} />
-                <span>Agent Configuration</span>
-                {effectiveRuntimeConfig.model_name && (
-                  <span className="text-xs text-muted-foreground">
-                    ({effectiveRuntimeConfig.model_name.split(":")[1] || effectiveRuntimeConfig.model_name})
-                  </span>
-                )}
-              </div>
-              {showConfig ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-            {showConfig && (
-              <div className="mt-2 rounded-lg border border-border bg-sidebar p-4">
-                <div className="space-y-4">
+        {/* Settings Panel - rendered outside overflow container */}
+        {selectedAgentId === "research" && showConfig && (
+          <>
+            <div 
+              className="fixed inset-0 z-40" 
+              onClick={() => setShowConfig(false)}
+            />
+            <div className="fixed bottom-24 right-4 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-sidebar p-4 shadow-lg">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="model-select" className="text-sm font-medium">
+                    Model
+                  </Label>
+                  <Select
+                    value={effectiveRuntimeConfig.model_name || "openai:gpt-4o"}
+                    onValueChange={(value) => {
+                      setEffectiveRuntimeConfig((prev: RuntimeConfig) => ({
+                        ...prev,
+                        model_name: value,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger id="model-select" className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableModels.map((model) => (
+                        <SelectItem key={model.value} value={model.value}>
+                          {model.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Tools</Label>
                   <div className="space-y-2">
-                    <Label htmlFor="model-select" className="text-sm font-medium">
-                      Model
-                    </Label>
-                    <Select
-                      value={effectiveRuntimeConfig.model_name || "openai:gpt-4o"}
-                      onValueChange={(value) => {
-                        setEffectiveRuntimeConfig((prev: RuntimeConfig) => ({
-                          ...prev,
-                          model_name: value,
-                        }));
-                      }}
-                    >
-                      <SelectTrigger id="model-select" className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.map((model) => (
-                          <SelectItem key={model.value} value={model.value}>
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Tools</Label>
-                    <div className="space-y-2">
-                      {availableTools.map((tool) => {
-                        const isChecked = effectiveRuntimeConfig.selected_tools?.includes(tool.value) ?? false;
-                        const handleToggle = () => {
-                          const newChecked = !isChecked;
-                          setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
-                            const currentTools = prev?.selected_tools || [];
-                            const newTools = newChecked
-                              ? (currentTools.includes(tool.value) 
-                                  ? currentTools 
-                                  : [...currentTools, tool.value])
-                              : currentTools.filter((t) => t !== tool.value);
-                            
-                            return {
-                              ...prev,
-                              selected_tools: newTools,
-                            };
-                          });
-                        };
-                        
-                        return (
-                          <div 
-                            key={tool.value} 
-                            className="flex items-center space-x-2"
+                    {availableTools.map((tool) => {
+                      const isChecked = effectiveRuntimeConfig.selected_tools?.includes(tool.value) ?? false;
+                      const handleToggle = () => {
+                        const newChecked = !isChecked;
+                        setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
+                          const currentTools = prev?.selected_tools || [];
+                          const newTools = newChecked
+                            ? (currentTools.includes(tool.value) 
+                                ? currentTools 
+                                : [...currentTools, tool.value])
+                            : currentTools.filter((t) => t !== tool.value);
+                          
+                          return {
+                            ...prev,
+                            selected_tools: newTools,
+                          };
+                        });
+                      };
+                      
+                      return (
+                        <div 
+                          key={tool.value} 
+                          className="flex items-center space-x-2"
+                        >
+                          <Checkbox
+                            id={`tool-${tool.value}`}
+                            checked={isChecked}
+                            onCheckedChange={handleToggle}
+                          />
+                          <Label
+                            htmlFor={`tool-${tool.value}`}
+                            className="text-sm font-normal cursor-pointer select-none"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleToggle();
+                            }}
                           >
-                            <Checkbox
-                              id={`tool-${tool.value}`}
-                              checked={isChecked}
-                              onCheckedChange={handleToggle}
-                            />
-                            <Label
-                              htmlFor={`tool-${tool.value}`}
-                              className="text-sm font-normal cursor-pointer select-none"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleToggle();
-                              }}
-                            >
-                              {tool.label}
-                            </Label>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            {tool.label}
+                          </Label>
+                        </div>
+                      );
+                    })}
                   </div>
+                </div>
 
-                  {/* Subagents */}
-                  <div className="border-t border-border pt-4 mt-4">
-                    <Label className="text-sm font-semibold mb-3 block">Subagents</Label>
-                    <div className="space-y-2 pl-2 border-l-2 border-border/50">
-                          {availableSubagents.map((subagent) => {
-                            // Check if subagent is selected (handle undefined and empty array cases)
-                            const selectedSubagents = effectiveRuntimeConfig.selected_subagents || [];
-                            const isChecked = Array.isArray(selectedSubagents) && selectedSubagents.includes(subagent.value);
-                            const handleToggle = () => {
-                              setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
-                                const currentSubagents = prev?.selected_subagents || [];
-                                const newSubagents = !isChecked
-                                  ? (currentSubagents.includes(subagent.value) 
-                                      ? currentSubagents 
-                                      : [...currentSubagents, subagent.value])
-                                  : currentSubagents.filter((s) => s !== subagent.value);
-                                
-                                return {
-                                  ...prev,
-                                  // Always send an array (empty array means no subagents)
-                                  selected_subagents: newSubagents,
-                                };
-                              });
-                            };
-                            
-                            return (
-                              <div 
-                                key={`subagent-${subagent.value}`} 
-                                className="flex items-start space-x-2"
-                              >
-                                <Checkbox
-                                  id={`subagent-select-${subagent.value}`}
-                                  checked={isChecked}
-                                  onCheckedChange={handleToggle}
-                                  className="mt-0.5"
-                                />
-                                <div className="flex-1">
-                                  <Label
-                                    htmlFor={`subagent-select-${subagent.value}`}
-                                    className="text-sm font-normal cursor-pointer select-none"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      handleToggle();
-                                    }}
-                                  >
-                                    {subagent.label}
-                                  </Label>
-                                  {subagent.description && (
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                      {subagent.description}
-                                    </p>
-                                  )}
-                                </div>
+                {/* Subagents */}
+                <div className="border-t border-border pt-4 mt-4">
+                  <Label className="text-sm font-semibold mb-3 block">Subagents</Label>
+                  <div className="space-y-2 pl-2 border-l-2 border-border/50">
+                        {availableSubagents.map((subagent) => {
+                          // Check if subagent is selected (handle undefined and empty array cases)
+                          const selectedSubagents = effectiveRuntimeConfig.selected_subagents || [];
+                          const isChecked = Array.isArray(selectedSubagents) && selectedSubagents.includes(subagent.value);
+                          const handleToggle = () => {
+                            setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
+                              const currentSubagents = prev?.selected_subagents || [];
+                              const newSubagents = !isChecked
+                                ? (currentSubagents.includes(subagent.value) 
+                                    ? currentSubagents 
+                                    : [...currentSubagents, subagent.value])
+                                : currentSubagents.filter((s) => s !== subagent.value);
+                              
+                              return {
+                                ...prev,
+                                // Always send an array (empty array means no subagents)
+                                selected_subagents: newSubagents,
+                              };
+                            });
+                          };
+                          
+                          return (
+                            <div 
+                              key={`subagent-${subagent.value}`} 
+                              className="flex items-start space-x-2"
+                            >
+                              <Checkbox
+                                id={`subagent-select-${subagent.value}`}
+                                checked={isChecked}
+                                onCheckedChange={handleToggle}
+                                className="mt-0.5"
+                              />
+                              <div className="flex-1">
+                                <Label
+                                  htmlFor={`subagent-select-${subagent.value}`}
+                                  className="text-sm font-normal cursor-pointer select-none"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleToggle();
+                                  }}
+                                >
+                                  {subagent.label}
+                                </Label>
+                                {subagent.description && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {subagent.description}
+                                  </p>
+                                )}
                               </div>
-                            );
-                          })}
-                    </div>
+                            </div>
+                          );
+                        })}
                   </div>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          </>
         )}
 
         <div
@@ -917,7 +901,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
               rows={1}
               style={{ minHeight: "44px", maxHeight: "200px" }}
             />
-            <div className="flex items-center justify-between gap-2 border-t border-border py-1.5 px-3">
+            <div className="flex items-center justify-between gap-2 border-t border-border py-1.5 px-3 relative">
               <div className="flex items-center gap-2">
                 {onAssistantChange && availableAgents.length > 1 && (
                   <Select
@@ -965,7 +949,19 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
                   </Select>
                 )}
               </div>
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center justify-end gap-1">
+                {selectedAgentId === "research" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowConfig(!showConfig)}
+                    disabled={isLoading || submitDisabled}
+                    className="h-7 w-7"
+                  >
+                    <Settings size={16} />
+                  </Button>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
