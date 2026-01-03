@@ -8,6 +8,10 @@ import type { UseStreamThread } from "@langchain/langgraph-sdk/react";
 export interface RuntimeConfig {
   model_name?: string;
   selected_tools?: string[];
+  // Subagent configuration
+  selected_subagents?: string[];  // List of subagent names to include
+  subagent_model_name?: string;  // Optional: if not set, uses main agent model
+  subagent_selected_tools?: string[];  // Optional: if not set, uses main agent tools
 }
 
 interface ChatProviderProps {
@@ -29,6 +33,7 @@ export function ChatProvider({
     initialRuntimeConfig || {
       model_name: "openai:gpt-4o",
       selected_tools: ["tavily_search", "think_tool"],
+      selected_subagents: ["research-agent"],  // Default: include research-agent (empty array = no subagents)
     }
   );
 

@@ -211,6 +211,10 @@ export function useChat({
           ...(activeAssistant?.config?.configurable ?? {}),
           ...(runtimeConfig?.model_name ? { model_name: runtimeConfig.model_name } : {}),
           ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
+          // Always include selected_subagents if it exists (even if empty array)
+          ...(runtimeConfig?.selected_subagents !== undefined ? { selected_subagents: runtimeConfig.selected_subagents } : {}),
+          ...(runtimeConfig?.subagent_model_name ? { subagent_model_name: runtimeConfig.subagent_model_name } : {}),
+          ...(runtimeConfig?.subagent_selected_tools ? { subagent_selected_tools: runtimeConfig.subagent_selected_tools } : {}),
         },
       };
 
@@ -316,6 +320,10 @@ export function useChat({
           ...(activeAssistant?.config?.configurable ?? {}),
           ...(runtimeConfig?.model_name ? { model_name: runtimeConfig.model_name } : {}),
           ...(runtimeConfig?.selected_tools ? { selected_tools: runtimeConfig.selected_tools } : {}),
+          // Always include selected_subagents if it exists (even if empty array)
+          ...(runtimeConfig?.selected_subagents !== undefined ? { selected_subagents: runtimeConfig.selected_subagents } : {}),
+          ...(runtimeConfig?.subagent_model_name ? { subagent_model_name: runtimeConfig.subagent_model_name } : {}),
+          ...(runtimeConfig?.subagent_selected_tools ? { subagent_selected_tools: runtimeConfig.subagent_selected_tools } : {}),
         },
       };
 

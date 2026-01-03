@@ -162,6 +162,12 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
     { value: "think_tool", label: "Think Tool" },
   ];
 
+  // Available subagents
+  const availableSubagents = [
+    { value: "research-agent", label: "Research Agent", description: "Specialized agent for conducting research tasks" },
+    // Add more subagents here as they become available
+  ];
+
   const {
     stream,
     messages,
@@ -589,6 +595,156 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+
+                  {/* Subagent Configuration */}
+                  <div className="border-t border-border pt-4 mt-4">
+                    <Label className="text-sm font-semibold mb-3 block">Subagent Configuration</Label>
+                    <div className="space-y-4 pl-2 border-l-2 border-border/50">
+                      {/* Subagent Selection */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          Select Subagents
+                          <span className="text-xs text-muted-foreground ml-1 font-normal">
+                            (choose which subagents to include)
+                          </span>
+                        </Label>
+                        <div className="space-y-2">
+                          {availableSubagents.map((subagent) => {
+                            // Check if subagent is selected (handle undefined and empty array cases)
+                            const selectedSubagents = effectiveRuntimeConfig.selected_subagents || [];
+                            const isChecked = Array.isArray(selectedSubagents) && selectedSubagents.includes(subagent.value);
+                            const handleToggle = () => {
+                              setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
+                                const currentSubagents = prev?.selected_subagents || [];
+                                const newSubagents = !isChecked
+                                  ? (currentSubagents.includes(subagent.value) 
+                                      ? currentSubagents 
+                                      : [...currentSubagents, subagent.value])
+                                  : currentSubagents.filter((s) => s !== subagent.value);
+                                
+                                return {
+                                  ...prev,
+                                  // Always send an array (empty array means no subagents)
+                                  selected_subagents: newSubagents,
+                                };
+                              });
+                            };
+                            
+                            return (
+                              <div 
+                                key={`subagent-${subagent.value}`} 
+                                className="flex items-start space-x-2"
+                              >
+                                <Checkbox
+                                  id={`subagent-select-${subagent.value}`}
+                                  checked={isChecked}
+                                  onCheckedChange={handleToggle}
+                                  className="mt-0.5"
+                                />
+                                <div className="flex-1">
+                                  <Label
+                                    htmlFor={`subagent-select-${subagent.value}`}
+                                    className="text-sm font-normal cursor-pointer select-none"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      handleToggle();
+                                    }}
+                                  >
+                                    {subagent.label}
+                                  </Label>
+                                  {subagent.description && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {subagent.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="subagent-model-select" className="text-sm font-medium">
+                          Subagent Model
+                          <span className="text-xs text-muted-foreground ml-1 font-normal">
+                            (optional - uses main model if not set)
+                          </span>
+                        </Label>
+                        <Select
+                          value={effectiveRuntimeConfig.subagent_model_name || "__use_main__"}
+                          onValueChange={(value) => {
+                            setEffectiveRuntimeConfig((prev: RuntimeConfig) => ({
+                              ...prev,
+                              subagent_model_name: value === "__use_main__" ? undefined : value,
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="subagent-model-select" className="h-9">
+                            <SelectValue placeholder="Use main agent model" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__use_main__">Use main agent model</SelectItem>
+                            {availableModels.map((model) => (
+                              <SelectItem key={model.value} value={model.value}>
+                                {model.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          Subagent Tools
+                          <span className="text-xs text-muted-foreground ml-1 font-normal">
+                            (optional - uses main agent tools if not set)
+                          </span>
+                        </Label>
+                        <div className="space-y-2">
+                          {availableTools.map((tool) => {
+                            const isChecked = effectiveRuntimeConfig.subagent_selected_tools?.includes(tool.value) ?? false;
+                            const handleToggle = () => {
+                              setEffectiveRuntimeConfig((prev: RuntimeConfig) => {
+                                const currentTools = prev?.subagent_selected_tools || [];
+                                const newTools = !isChecked
+                                  ? (currentTools.includes(tool.value) 
+                                      ? currentTools 
+                                      : [...currentTools, tool.value])
+                                  : currentTools.filter((t) => t !== tool.value);
+                                
+                                return {
+                                  ...prev,
+                                  subagent_selected_tools: newTools.length > 0 ? newTools : undefined,
+                                };
+                              });
+                            };
+                            
+                            return (
+                              <div 
+                                key={`subagent-${tool.value}`} 
+                                className="flex items-center space-x-2"
+                              >
+                                <Checkbox
+                                  id={`subagent-tool-${tool.value}`}
+                                  checked={isChecked}
+                                  onCheckedChange={handleToggle}
+                                />
+                                <Label
+                                  htmlFor={`subagent-tool-${tool.value}`}
+                                  className="text-sm font-normal cursor-pointer select-none"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleToggle();
+                                  }}
+                                >
+                                  {tool.label}
+                                </Label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
