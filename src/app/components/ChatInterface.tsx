@@ -148,7 +148,8 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({
   // Available models
   const availableModels = [
     { value: "openai:gpt-4o", label: "GPT-4o (OpenAI)" },
-    { value: "openai:gpt-4-turbo", label: "GPT-4 Turbo (OpenAI)" },
+    { value: "openai:gpt-4.1", label: "GPT-4.1 (OpenAI)" },
+    { value: "openai:gpt-5.2", label: "GPT-5.2 (OpenAI)" },
     { value: "anthropic:claude-sonnet-4-5-20250514", label: "Claude Sonnet 4.5 (Anthropic)" },
     { value: "anthropic:claude-opus-4-20250514", label: "Claude Opus 4 (Anthropic)" },
     { value: "google:gemini-3-pro-preview", label: "Gemini 3 Pro (Google)" },
